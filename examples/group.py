@@ -5,19 +5,45 @@ import rospy
 import time
 import sys
 import math
+import numpy as np
 
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import TwistStamped, PoseStamped
 from mavros_msgs.msg import PositionTarget, State, ExtendedState
+from std_msgs.msg import String
 from geographic_msgs.msg import GeoPointStamped
+import matplotlib.pyplot as plt
 
 from mavros_msgs.srv import SetMode, CommandBool, CommandVtolTransition, CommandHome
 
-instances_num = 3 #количество аппаратов
+instances_num = 6 #количество аппаратов
 freq = 20 #Герц, частота посылки управляющих команд аппарату
 node_name = "offboard_node"
 data = {}
 lz = {}
+path_x = []
+path_y = []
+formation_string = "string"
+formation = []
+formation_global = []
+
+def change_coor_system(ref_point):
+  for i in range(6):
+    formation_global.append([formation[i][j] + ref_point[j]  for j in range(3)])
+
+  return formation_global
+
+def find_distance(p1, p2):
+  res = 0
+  for i in range(3):
+    res += p1[i] ** 2 + p2[i] ** 2
+
+  return res
+
+def find_transition(state, formation):
+  for i in range(instances_num):
+    for j in range(instances_num):
+
 
 def subscribe_on_mavros_topics(suff, data_class):
   #подписываемся на Mavros топики всех аппаратов
@@ -26,6 +52,21 @@ def subscribe_on_mavros_topics(suff, data_class):
     topic = f"/mavros{n}/{suff}"
     rospy.Subscriber(topic, data_class, topic_cb, callback_args = (n, suff))
 
+def subscribe_formations(suff, data_class):
+  rospy.Subscriber(suff, data_class, formation_cb, callback_args = (formation_string))
+
+def formation_cb(msg, formation_string):
+  msg = str(msg)
+  if formation_string != msg:
+    formation_string = msg
+    formation_temp = formation_string.split(' ')[3:]
+    for i in range(6):
+      formation.append([float(j.strip('\"')) for j in formation_temp[i*3:(i+1)*3]])
+    #print(formation)
+    formation_global = change_coor_system([0, 72, 25])
+    print(formation_global)
+
+    
 def topic_cb(msg, callback_args):
   n, suff = callback_args
   data[n][suff] = msg
@@ -34,7 +75,7 @@ def service_proxy(n, path, arg_type, *args, **kwds):
   service = rospy.ServiceProxy(f"/mavros{n}/{path}", arg_type)
   ret = service(*args, **kwds)
 
-  rospy.loginfo(f"{n}: {path} {args}, {kwds} => {ret}")
+  #rospy.loginfo(f"{n}: {path} {args}, {kwds} => {ret}")
 
 def arming(n, to_arm):
   d = data[n].get("state")
@@ -63,6 +104,9 @@ def subscribe_on_topics():
   #состояние
   subscribe_on_mavros_topics("state", State)
   subscribe_on_mavros_topics("extended_state", ExtendedState)
+
+  #formation
+  subscribe_formations("formations_generator/formation", String)
 
 
 def on_shutdown_cb():
@@ -115,8 +159,8 @@ def mc_takeoff(pt, n, dt):
     set_vel(pt, 0, 0, 4)
 
     #армимся и взлетаем с заданной скоростью
-    if dt>5:
-      arming(n, True)
+  if dt>5:
+    arming(n, True)
 
 #пример управления коптерами
 def mc_example(pt, n, dt):
@@ -124,34 +168,39 @@ def mc_example(pt, n, dt):
 
   if dt>10 and dt<15:
     #скорость вверх
-    set_vel(pt, 0, 0, 1)
+    set_vel(pt, 10000, 0, 0)
 
-  #летим в одном направлении, разносим по высоте
+    # set_pos(pt, n* 2, 5, 1)
+
+
+  # #летим в одном направлении, разносим по высоте
   if dt>15 and dt<20:
-    set_vel(pt, 5, 0, (n-2)/2)
+  #   set_vel(pt, 5, 0, (n-2)/2)
+    set_vel(pt, 0, 10000, 0)
 
-  #первый коптер летит по квадрату, остальные следуют с такой же горизонтальнй скоростью как первый
-  if dt>20 and dt<30:
-    if n == 1:
-      if dt>20:
-        set_vel(pt, 0, -5, 0)
 
-      if dt>24:
-        set_vel(pt, -5, 0, 0)
+  # #первый коптер летит по квадрату, остальные следуют с такой же горизонтальнй скоростью как первый
+  # if dt>20 and dt<30:
+  #   if n == 1:
+  #     if dt>20:
+  #       set_vel(pt, 0, -5, 0)
 
-      if dt>27:
-        set_vel(pt, 0, 5, 0)
-    else:
-      v1 = data[1]["local_position/velocity_local"].twist.linear
-      set_vel(pt, v1.x, v1.y, 0)
+  #     if dt>24:
+  #       set_vel(pt, -5, 0, 0)
 
-  #направляем каждого в свою точку
-  if dt>30 and dt<35:
-    set_pos(pt, 0, (n-2)*3, 10)
+  #     if dt>27:
+  #       set_vel(pt, 0, 5, 0)
+  #   else:
+  #     v1 = data[1]["local_position/velocity_local"].twist.linear
+  #     set_vel(pt, v1.x, v1.y, 0)
 
-  #снижаем на землю
-  if dt>35:
-    set_vel(pt, 0, 0, -1)
+  # #направляем каждого в свою точку
+  # if dt>30 and dt<35:
+  #   set_pos(pt, 0, (n-2)*3, 10)
+
+  # #снижаем на землю
+  # if dt>35:
+  #   set_vel(pt, 0, 0, -1)
 
 #пример управления vtol
 def vtol_example(pt, n, dt):
@@ -203,6 +252,8 @@ def offboard_loop(mode):
   #цикл управления
   rate = rospy.Rate(freq)
   while not rospy.is_shutdown():
+    
+    
     dt = time.time() - t0
 
     #управляем каждым аппаратом централизованно
@@ -215,7 +266,7 @@ def offboard_loop(mode):
         vtol_example(pt, n, dt)
 
       pub_pt[n].publish(pt)
-
+      
     rate.sleep()
 
 if __name__ == '__main__':
@@ -238,4 +289,8 @@ if __name__ == '__main__':
   except rospy.ROSInterruptException:
     pass
 
+  # print("EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEe")
+  # plt.figure()
+  # plt.plot(path_x, path_y)
+  # plt.show()
   rospy.spin()
