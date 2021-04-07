@@ -242,7 +242,7 @@ class Drones:
     self.omega = 0.03
     self.cur_state = States.TRANSITION
     self.cur_direction = [1, 0, 0]
-    self.if_turn_complete = False
+    self.if_turn_complete = [False for i in range(instances_num)]
     self.angle_turned = 0
     self.speed = 20
     self.formation_assumed = False
@@ -250,28 +250,19 @@ class Drones:
     self.ref_velocity = [0, 0, 0]
 
     try:
-      
       for i in range(self.numberOfDrones):
         self.positions.append(data[i+1]['local_position/pose'].pose.position)
-        #print(data[i+1]['local_position/velocity_local'].twist.linear)
-        #print(positions[i])
-        
       self.matrix = np.zeros((6, 6))
-      
     except Exception:
       print('exception in drones init')
       self.exist = False
-      # print('positions:\n', self.positions)
     
     if (len(self.positions)>0):
       for i in range(self.numberOfDrones):
         pos = self.positions[i]
-        #print([pos.x, pos.y, pos.z])
         self.drones.append(Drone(Point3D([pos.x, pos.y, pos.z])))
 
   def setCurrentState(self):
-    # print("setting state")
-    print('\n')
     turnCounter = 0
     # for pos in self.positions:
     pos = self.positions[0]
@@ -282,7 +273,7 @@ class Drones:
     else:
       self.cur_state = States.ROAM
       
-    print(self.cur_state)
+    # print(self.cur_state)
 
   
   def processMatrix(self):
@@ -338,15 +329,8 @@ def change_coor_system(ref_point):
   formation_global = []
   for i in range(instances_num):
     formation_global.append([formation[i][j] + ref_point[j]  for j in range(3)])
-  print('change coor', formation_global)
+  # print('change coor', formation_global)
   return formation_global
-
-
-
-def find_transition(state, formation):
-  print("State\n", state)
-  print("Formation\n", formation)
-
 
 def subscribe_on_mavros_topics(suff, data_class):
   #подписываемся на Mavros топики всех аппаратов
@@ -365,6 +349,7 @@ def formation_cb(msg, callback_args):
   if formation_string != msg:
     formation_string = msg
     formation_temp = formation_string.split(' ')[3:]
+    print(formation_string)
     for i in range(6):
       formation.append([float(j.strip('\"')) for j in formation_temp[i*3:(i+1)*3]])
     
@@ -374,8 +359,7 @@ def formation_cb(msg, callback_args):
       print('global does not exist')
       drones_global = Drones(data)
     else:
-      drones_global.setPositions(data)
-   
+      drones_global.setPositions(data)  
     
 def topic_cb(msg, callback_args):
   n, suff = callback_args
@@ -417,7 +401,6 @@ def subscribe_on_topics():
 
   #formation
   subscribe_formations("formations_generator/formation", String, drones_global)
-
 
 def on_shutdown_cb():
   rospy.logfatal("shutdown")
@@ -485,58 +468,49 @@ def mc_example(pt, n, dt, tb):
 
   if dt>10:
     if drones_global.cur_state == States.ROAM:
-      pass
-      #set_vel(pt, drones_global.speed * drones_global.cur_direction[0], drones_global.speed * drones_global.cur_direction[1], drones_global.speed * drones_global.cur_direction[2])
-      
+      drones_global.formation_assumed = False
+      drones_global.if_turn_complete = [False for i in range(instances_num)]
+      if drones_global.positions[0].x > 0:
+        drones_global.cur_direction = [0, 1, 0]
+        set_vel(pt, drones_global.speed * drones_global.cur_direction[0], drones_global.speed * drones_global.cur_direction[1], drones_global.speed * drones_global.cur_direction[2])
+      else:
+        drones_global.cur_direction = [0, -1, 0]
+        set_vel(pt, drones_global.speed * drones_global.cur_direction[0], drones_global.speed * drones_global.cur_direction[1], drones_global.speed * drones_global.cur_direction[2])
     elif drones_global.cur_state == States.TRANSITION:
       if drones_global.positions[0].y - 72 < -62:
-        drones_global.ref_point = [40, 0, 0]
+        drones_global.ref_point = [41, 0, 0]
       else:
-        drones_global.ref_point = [-40, 0, 0]
-      #change_coor_system()
+        drones_global.ref_point = [-41, 144, 0]
+        
       
       k = drones_global.targets[n-1]
-      print(n, ' ', formation_global[k])
-      set_pos(pt, formation_global[k][0], formation_global[k][1],formation_global[k][2])
+      # print(n, ' ', formation_global[k])
+      dist = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z], formation_global[k])
+      # print(dist)
+      if dist > 0.5 and not drones_global.formation_assumed:
+        set_pos(pt, formation_global[k][0], formation_global[k][1],formation_global[k][2])
+      else:
+        drones_global.formation_assumed = True
+        ref_vector = np.array([drones_global.ref_point[0], drones_global.ref_point[1], formation_global[k][2]])
+        relative_vector = ref_vector - np.array(formation_global[k])
+        # print(n, ' relative', relative_vector)
+        relative_vector_turned = turnVectorByAlpha2d(-math.pi / 2, relative_vector)
+        # print(n, ' relative turned ', relative_vector_turned)
+        turned_formation = ref_vector + np.array(relative_vector_turned)
+        # print(n, ' turned ', turned_formation)
+
+        dist_turned = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z], list(turned_formation))
+        if dist_turned > 0.5 and False in drones_global.if_turn_complete:
+          set_pos(pt, turned_formation[0], turned_formation[1], turned_formation[2])
+        elif dist_turned < 0.5 and False in drones_global.if_turn_complete:
+          drones_global.if_turn_complete[n - 1] = True
+        else:
+          if drones_global.positions[0].y - 72 < -62:
+            set_vel(pt, 0, 12, 0)
+          else:
+            set_vel(pt, 0, -12, 0)
 
   return t_new
-
-
-
-#пример управления vtol
-def vtol_example(pt, n, dt):
-  mc_takeoff(pt, n, dt)
-
-  #летим вперед-влево с разными скоростями медленно в режиме коптера
-  if dt>15 and dt<20:
-    set_vel(pt, 5, n, 0)
-
-  #запоминаем высоту, на которую прилетели в режиме коптера
-  if dt>19 and dt<20:
-    lz[n] = data[n]["local_position/pose"].pose.position.z
-
-  #переходим в самолетный режим, летим быстрее с одинаковой скоростью
-  if dt>20 and dt<25:
-    vtol_to_fw(n)
-    set_vxy_pz(pt, 15, 0, lz[n])
-
-  if dt>25 and dt<30:
-    #1-ый на юг
-    if n == 1:
-      set_vxy_pz(pt, 0, -15, lz[n])
-
-    #2-ой чуть снижаем
-    if n == 2:
-      set_vxy_pz(pt, 15, 0, lz[n]-10)
-
-    #3-ий на север
-    if n == 3:
-      set_vxy_pz(pt, 0, 15, lz[n])
-
-  #всех направляем в одну точку, но с разными высотами
-  #в самолетном режиме, ожидает вокруг точки назначения
-  if dt>30:
-    set_pos(pt, 0, 0, n*10)
 
 def offboard_loop(mode):
   pub_pt = {}
@@ -562,7 +536,7 @@ def offboard_loop(mode):
       drones_global.setCurrentState()
     except Exception:
       pass
-      #print(drones_global.cur_state)
+      print(drones_global.cur_state)
 
     #управляем каждым аппаратом централизованно
     for n in range(1, instances_num + 1):
@@ -601,8 +575,4 @@ if __name__ == '__main__':
   except rospy.ROSInterruptException:
     pass
 
-  # print("EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEe")
-  # plt.figure()
-  # plt.plot(path_x, path_y)
-  # plt.show()
   rospy.spin()
