@@ -18,6 +18,7 @@ from mavros_msgs.srv import SetMode, CommandBool, CommandVtolTransition, Command
 
 from munkres import Munkres, print_matrix 
 from sympy import Point3D, Line3D, Ray3D, Segment3D
+from enum import Enum, auto
 
 instances_num = 6 #количество аппаратов
 freq = 20 #Герц, частота посылки управляющих команд аппарату
@@ -29,6 +30,22 @@ path_y = []
 formation_string = "string"
 formation = []
 formation_global = []
+
+def turnVectorByAlpha2d(alpha, vec):
+  rotMatrix = [[math.cos(alpha), -math.sin(alpha), 0],
+               [math.sin(alpha),              math.cos(alpha),   0              ],
+               [0,0,   1]]
+
+  result = [0, 0, 0]
+  for i in range(3):
+    for j in range(3):
+      result[i] += rotMatrix[i][j] * vec[j]
+
+  return result
+
+class States(Enum):
+    ROAM = auto()
+    TRANSITION = auto()
 
 class Vector3D:
   def __init__(self, direction):
@@ -217,11 +234,22 @@ class Drones:
   def __init__(self, data):
     print('initiating')
     self.exist = True
+    self.numberOfDrones = instances_num 
     self.positions = []
     self.targets = []
     self.drones = []
+
+    self.omega = 0.03
+    self.cur_state = States.TRANSITION
+    self.cur_direction = [1, 0, 0]
+    self.if_turn_complete = False
+    self.angle_turned = 0
+    self.speed = 20
+    self.formation_assumed = False
+    self.ref_point = [0, 0, 0]
+    self.ref_velocity = [0, 0, 0]
+
     try:
-      self.numberOfDrones = len(data.keys()) 
       
       for i in range(self.numberOfDrones):
         self.positions.append(data[i+1]['local_position/pose'].pose.position)
@@ -240,6 +268,22 @@ class Drones:
         pos = self.positions[i]
         #print([pos.x, pos.y, pos.z])
         self.drones.append(Drone(Point3D([pos.x, pos.y, pos.z])))
+
+  def setCurrentState(self):
+    # print("setting state")
+    print('\n')
+    turnCounter = 0
+    # for pos in self.positions:
+    pos = self.positions[0]
+
+    #print(pos.z - 72)
+    if (pos.y - 72 < -62 or pos.y - 72 > 62):
+      self.cur_state = States.TRANSITION
+    else:
+      self.cur_state = States.ROAM
+      
+    print(self.cur_state)
+
   
   def processMatrix(self):
     
@@ -249,7 +293,7 @@ class Drones:
     #print('setting')
     self.numberOfDrones = len(data.keys())
     for i in range(self.numberOfDrones):
-      self.positions.append(data[i+1]['local_position/pose'].pose.position)
+      self.positions[i] = data[i+1]['local_position/pose'].pose.position
     
     self.processMatrix()
     
@@ -290,9 +334,11 @@ class Drones:
 
 #drones = Drones('')
 def change_coor_system(ref_point):
-  for i in range(6):
+  global formation_global
+  formation_global = []
+  for i in range(instances_num):
     formation_global.append([formation[i][j] + ref_point[j]  for j in range(3)])
-
+  print('change coor', formation_global)
   return formation_global
 
 
@@ -321,7 +367,8 @@ def formation_cb(msg, callback_args):
     formation_temp = formation_string.split(' ')[3:]
     for i in range(6):
       formation.append([float(j.strip('\"')) for j in formation_temp[i*3:(i+1)*3]])
-    formation_global = change_coor_system([0, 0, 0])#72, 25])
+    
+    formation_global = change_coor_system(drones_global.ref_point)#72, 25])
     
     if not drones_global.exist:
       print('global does not exist')
@@ -426,48 +473,35 @@ def mc_takeoff(pt, n, dt):
     arming(n, True)
 
 #пример управления коптерами
-def mc_example(pt, n, dt):
+def mc_example(pt, n, dt, tb):
+  t_new = time.time()
+  if tb is None:
+    delta = 0
+  else:
+    delta =  t_new - tb
+
   mc_takeoff(pt, n, dt)
   global drones_global
-  #if dt>10 and dt<15:
-    #скорость вверх
-    #set_vel(pt, 10000, 0, 0)
-
-    # set_pos(pt, n* 2, 5, 1)
 
   if dt>10:
-    coor = formation_global[drones_global.targets[n - 1 ]]
-    #print(coor)
-    set_pos(pt, coor[0], coor[1], coor[2])
+    if drones_global.cur_state == States.ROAM:
+      pass
+      #set_vel(pt, drones_global.speed * drones_global.cur_direction[0], drones_global.speed * drones_global.cur_direction[1], drones_global.speed * drones_global.cur_direction[2])
+      
+    elif drones_global.cur_state == States.TRANSITION:
+      if drones_global.positions[0].y - 72 < -62:
+        drones_global.ref_point = [40, 0, 0]
+      else:
+        drones_global.ref_point = [-40, 0, 0]
+      #change_coor_system()
+      
+      k = drones_global.targets[n-1]
+      print(n, ' ', formation_global[k])
+      set_pos(pt, formation_global[k][0], formation_global[k][1],formation_global[k][2])
 
-  # #летим в одном направлении, разносим по высоте
-  # if dt>15 and dt<20:
-  # #   set_vel(pt, 5, 0, (n-2)/2)
-  #   set_vel(pt, 0, 10000, 0)
+  return t_new
 
 
-  # #первый коптер летит по квадрату, остальные следуют с такой же горизонтальнй скоростью как первый
-  # if dt>20 and dt<30:
-  #   if n == 1:
-  #     if dt>20:
-  #       set_vel(pt, 0, -5, 0)
-
-  #     if dt>24:
-  #       set_vel(pt, -5, 0, 0)
-
-  #     if dt>27:
-  #       set_vel(pt, 0, 5, 0)
-  #   else:
-  #     v1 = data[1]["local_position/velocity_local"].twist.linear
-  #     set_vel(pt, v1.x, v1.y, 0)
-
-  # #направляем каждого в свою точку
-  # if dt>30 and dt<35:
-  #   set_pos(pt, 0, (n-2)*3, 10)
-
-  # #снижаем на землю
-  # if dt>35:
-  #   set_vel(pt, 0, 0, -1)
 
 #пример управления vtol
 def vtol_example(pt, n, dt):
@@ -522,6 +556,13 @@ def offboard_loop(mode):
     
     
     dt = time.time() - t0
+    tb = None
+    try:
+      global drones_global
+      drones_global.setCurrentState()
+    except Exception:
+      pass
+      #print(drones_global.cur_state)
 
     #управляем каждым аппаратом централизованно
     for n in range(1, instances_num + 1):
@@ -529,7 +570,7 @@ def offboard_loop(mode):
     
 
       if mode == 0:
-        mc_example(pt, n, dt)
+        tb = mc_example(pt, n, dt, tb)
       elif mode == 1:
         vtol_example(pt, n, dt)
 
