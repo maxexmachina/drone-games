@@ -281,7 +281,7 @@ class Drones:
     self.calculateDistMatrix()
     self.find_optimal()
   def setPositions(self, data):
-    #print('setting')
+    print('setting')
     self.numberOfDrones = len(data.keys())
     for i in range(self.numberOfDrones):
       self.positions[i] = data[i+1]['local_position/pose'].pose.position
@@ -289,8 +289,8 @@ class Drones:
     self.processMatrix()
     
   def calculateDistMatrix(self):
+    print('fg', formation_global)
     self.matrix = np.zeros((6, 6))
-    
     for i in range(6):
       for j in range(6):
         #TODO:enough to calculate upper half 
@@ -327,6 +327,8 @@ class Drones:
 def change_coor_system(ref_point):
   global formation_global
   formation_global = []
+  for i in formation:
+    i[0], i[1] = i[1], i[0]
   for i in range(instances_num):
     formation_global.append([formation[i][j] + ref_point[j]  for j in range(3)])
   # print('change coor', formation_global)
@@ -340,16 +342,23 @@ def subscribe_on_mavros_topics(suff, data_class):
     rospy.Subscriber(topic, data_class, topic_cb, callback_args = (n, suff))
 
 def subscribe_formations(suff, data_class, drones):
-  rospy.Subscriber(suff, data_class, formation_cb, callback_args = (formation_string,))
+  rospy.Subscriber(suff, data_class, formation_cb)
 
-def formation_cb(msg, callback_args):
-  formation_string,   = callback_args
+def formation_cb(msg):
+  global formation_ar
   global drones_global
+  #formation = []
   msg = str(msg)
-  if formation_string != msg:
+  msg_ar = msg.split(' ')[3:]
+  if formation_ar != msg_ar:
+    print('fs ', formation_ar)
+    print('msg', msg_ar)
+    print('ref', drones_global.ref_point)
+    formation_ar = msg_ar
     formation_string = msg
-    formation_temp = formation_string.split(' ')[3:]
-    print(formation_string)
+    formation_temp = formation_ar #formation_string.split(' ')[3:]
+    
+    #print(formation_string)
     for i in range(6):
       formation.append([float(j.strip('\"')) for j in formation_temp[i*3:(i+1)*3]])
     
@@ -358,7 +367,13 @@ def formation_cb(msg, callback_args):
     if not drones_global.exist:
       print('global does not exist')
       drones_global = Drones(data)
+      formation_ar = []
     else:
+      if drones_global.positions[0].y - 72 < -62:
+        drones_global.ref_point = [41, 0, 0]
+      else:
+        drones_global.ref_point = [-41, 144, 0]
+      formation_global = change_coor_system(drones_global.ref_point)#72, 25])
       drones_global.setPositions(data)  
     
 def topic_cb(msg, callback_args):
@@ -497,6 +512,8 @@ def mc_example(pt, n, dt, tb):
         relative_vector_turned = turnVectorByAlpha2d(-math.pi / 2, relative_vector)
         # print(n, ' relative turned ', relative_vector_turned)
         turned_formation = ref_vector + np.array(relative_vector_turned)
+
+        
         # print(n, ' turned ', turned_formation)
 
         dist_turned = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z], list(turned_formation))
@@ -506,9 +523,13 @@ def mc_example(pt, n, dt, tb):
           drones_global.if_turn_complete[n - 1] = True
         else:
           if drones_global.positions[0].y - 72 < -62:
-            set_vel(pt, 0, 12, 0)
+            set_pos(pt, turned_formation[0], turned_formation[1], turned_formation[2])
+            if (n == 1):
+              print(n, ' turned ', turned_formation)
+            #set_vel(pt, 0, 12, 0)
           else:
-            set_vel(pt, 0, -12, 0)
+            set_pos(pt, turned_formation[0], turned_formation[1], turned_formation[2])
+            #set_vel(pt, 0, -12, 0)
 
   return t_new
 
@@ -536,7 +557,7 @@ def offboard_loop(mode):
       drones_global.setCurrentState()
     except Exception:
       pass
-      print(drones_global.cur_state)
+      #print(drones_global.cur_state)
 
     #управляем каждым аппаратом централизованно
     for n in range(1, instances_num + 1):
@@ -557,6 +578,7 @@ if __name__ == '__main__':
   drones_global = Drones('')
   rospy.init_node(node_name)
   rospy.loginfo(node_name + " started")
+  formation_ar =[]
 
   subscribe_on_topics()
   rospy.on_shutdown(on_shutdown_cb)
