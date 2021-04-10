@@ -35,6 +35,7 @@ ref_point1 = np.array([41, 0, 0], dtype='float64')
 ref_point2 = np.array([-41, 144, 0], dtype='float64')
 t0 = 0
 drone_i = 0
+coor_changed = False
 
 def turnVectorByAlpha2d(alpha, vec):
   rotMatrix = [[math.cos(alpha), -math.sin(alpha), 0],
@@ -283,6 +284,7 @@ class Drones:
     self.cur_direction = [1, 0, 0]
     self.speed = 12
     self.formation_assumed = [False for i in range(instances_num)]
+    self.formation_reached = [False] * instances_num
     self.ref_point = np.array([0, 0, 0], dtype='float64')
     self.roam_start_time = 0
 
@@ -340,7 +342,11 @@ class Drones:
     #     if (all(safe_single_drone[i+1:])):
     #       self.safe[i] = True
     self.build_order()
+    print(formation_global)
     print(self.order)
+    #print('order of points')
+    # for dr_n in (self.order):
+    #   p_n = self.targets.index() 
     
         
 
@@ -362,6 +368,7 @@ class Drones:
     global ref_point1
     global ref_point2
     order_def = [i for i in range(instances_num)]
+    print('building order', formation_global)
     if self.ref_point[1] == ref_point1[1]:
       sort_func = lambda i: -formation_global[i][0]
     elif self.ref_point[1] == ref_point2[1]:
@@ -369,6 +376,7 @@ class Drones:
     else:
       print('wrong ref point')
       return 0
+    #print('keys', [formation_global[i][0] for i in range(len(order_def))])
     self.order =  sorted(order_def, key=sort_func)  
   
   def send_drones(self, pt, n):
@@ -412,14 +420,23 @@ class Drones:
 def change_coor_system(ref_point):
   global formation_global
   global formation
-  formation_global = []
-  print('f2', formation)
-  for i in formation:
-    i[0], i[1] = i[1], i[0]
-  print('f2w', formation)
-  for i in range(instances_num):
-    formation_global.append([formation[i][j] + ref_point[j]  for j in range(3)])
-  # print(formation_global)
+  global coor_changed
+  
+  #print('f2', formation)
+  if (not coor_changed):
+    coor_changed = True
+    formation_global = []
+    turned_formation = [formation[i].copy() for i in range(len(formation))]
+    print('fb', formation)
+    print('f1w', turned_formation)
+    for i in turned_formation:
+      i[0], i[1] = i[1], i[0]
+    print('f2w', turned_formation)
+    print('ff', formation)
+
+    for i in range(instances_num):
+      formation_global.append([turned_formation[i][j] + ref_point[j]  for j in range(3)])
+    # print(formation_global)
   # print('change coor', formation_global)
   return formation_global
 
@@ -438,6 +455,7 @@ def formation_cb(msg):
   global drones_global
   global formation_global
   global formation
+  global coor_changed
   #formation = []
   msg = str(msg)
   #print(msg)
@@ -446,6 +464,7 @@ def formation_cb(msg):
     # print('fs ', formation_ar)
     # print('msg', msg_ar)
     # print('ref', drones_global.ref_point)
+    coor_changed = False
     formation_ar = msg_ar
     formation_string = msg
     formation_temp = formation_ar #formation_string.split(' ')[3:]
@@ -456,6 +475,8 @@ def formation_cb(msg):
       formation.append([float(j.strip('\"')) for j in formation_temp[i*3:(i+1)*3]])
     #print('ref', drones_global.ref_point)
     # print('formation', formation)
+    # print('point1')
+    coor_changed = False
     formation_global = change_coor_system(drones_global.ref_point)#72, 25])
     # print('fg', formation_global)
     if not drones_global.exist:
@@ -463,10 +484,14 @@ def formation_cb(msg):
       drones_global = Drones(data)
       formation_ar = []
     else:
+      
       if drones_global.positions[0].y - 72 < -62:
         drones_global.ref_point = [41, 0, 0]
       else:
         drones_global.ref_point = [-41, 144, 0]
+      # print('point1')
+      coor_changed = False
+      formation_global = change_coor_system(drones_global.ref_point)#72, 25])
       # formation_global = change_coor_system(drones_global.ref_point)#72, 25])
       drones_global.processMatrix()  
     
@@ -585,9 +610,11 @@ def mc_example(pt, n, dt, tb):
     arming(n, True)
 
   if dt>10 and len(drones_global.positions) == instances_num:
-    print(drones_global.cur_state)
+    #print(drones_global.cur_state)
     if drones_global.cur_state == States.ROAM:
+      print("roam")
       drones_global.formation_assumed = [False for i in range(instances_num)]
+      drones_global.formation_reached = [False] * instances_num
       drones_global.safe = [False] * instances_num
       
       if drones_global.positions[0].x > 0:
@@ -617,6 +644,7 @@ def mc_example(pt, n, dt, tb):
 
         # set_vel(pt, drones_global.speed * drones_global.cur_direction[0] + vel_x, drones_global.speed * drones_global.cur_direction[1] + vel_y, drones_global.speed * drones_global.cur_direction[2] + vel_z)
         set_pos(pt, formation_global[k][0], formation_global[k][1] + 144, formation_global[k][2])
+        print('target_pt', formation_global[k][0], formation_global[k][1] + 144, formation_global[k][2])
 
 
 
@@ -628,39 +656,80 @@ def mc_example(pt, n, dt, tb):
         k = drones_global.targets[n-1]
 
         # set_vel(pt, drones_global.speed * drones_global.cur_direction[0], drones_global.speed * drones_global.cur_direction[1], drones_global.speed * drones_global.cur_direction[2])
-        print('setting pos', formation_global)
-        print('delays', drones_global.delays)
+        #print('setting pos', formation_global)
+        #print('delays', drones_global.delays)
         set_pos(pt, formation_global[k][0], formation_global[k][1] - 144, formation_global[k][2])
     elif drones_global.cur_state == States.TRANSITION:
+      print("transition")
       if drones_global.positions[0].y - 72 < -62:
         drones_global.ref_point = ref_point1
       else:
         drones_global.ref_point = ref_point2
+      # print('point1')
       formation_global = change_coor_system(drones_global.ref_point)
 
       global drone_i
+      global t0
       k = drones_global.targets[n-1]
       if(drone_i < len(drones_global.order)):
-        drone_number = drones_global.targets.index(drone_i)
-        print('di', drone_i)
-        print('n ', n)
-        print('dn ', drone_number)
+        #drone_number = drones_global.targets.index(drone_i)
+        point_number = drones_global.order[drone_i]
+        #print('targets', drones_global.targets)
+        #print('di', drone_i)
+        drone_number = drones_global.targets.index(point_number)
+        #print('n ', n)
+        #print('dn ', drone_number)
         if (n - 1 == drone_number): 
-          set_pos(pt, formation_global[drone_number][0], formation_global[drone_number][1], formation_global[drone_number][2])
+          # print('branch1')
+          set_pos(pt, formation_global[point_number][0], formation_global[point_number][1], formation_global[point_number][2])
+          #print('pn', point_number)
+          #print('point', formation_global[point_number])
         elif drones_global.formation_assumed[n -1 ]:
-          print('keep', n-1)
-          keep_n = drones_global.targets.index(n-1)
-          print('keep num', keep_n)
-          set_pos(pt, formation_global[keep_n][0], formation_global[keep_n][1], formation_global[keep_n][2])
+          # print('branch2')
+          keep_pos_n = drones_global.targets[n - 1]
+          set_pos(pt, formation_global[keep_pos_n][0], formation_global[keep_pos_n][1], formation_global[keep_pos_n][2])
+          #print('kn', keep_n)
+          #print(' keep point', formation_global[keep_n])
         else:
-          set_pos(pt, drones_global.positions[n - 1].x, drones_global.positions[n - 1].y, drones_global.positions[n - 1].z)
+          # print('branch4')
+          # print(drones_global.formation_assumed)
+          set_pos(pt, drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z)
         
-        dist = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_global[drone_number])
-        print(dist)
-        if dist < 0.5:
+        dist = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_global[point_number])
+        #print(dist)
+        if (dist < 2000 and drone_i < len(drones_global.order) - 1) or dist<0.5:
           drone_i += 1
+          # print('dn', drone_number)
+          # print('dist', dist)
           drones_global.formation_assumed[drone_number] = True
-          print(drone_i)
+          print('fa', drones_global.formation_assumed)
+          #print(drone_i)
+      else:
+        k = drones_global.targets[n-1]
+        if all(drones_global.formation_assumed):
+          dist = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1 ].y, drones_global.positions[n-1].z], formation_global[k])
+          if dist < 0.5:
+            print(n, 'reached')
+            drones_global.formation_reached[n-1] = True
+          else:
+            set_pos(pt, formation_global[k][0], formation_global[k][1], formation_global[k][2])
+
+          if all(drones_global.formation_reached):
+            print("all in formation")
+            drone_i = 0
+            if drones_global.positions[0].y - 72 < -62:
+              # set_vel(pt, 0, 12, 0)
+              drones_global.are_ready = True
+              drones_global.cur_state = States.ROAM
+              drones_global.roam_start_time = time.time() - t0
+            else:
+              drones_global.cur_state = States.ROAM
+              drones_global.are_ready = True
+              # set_vel(pt, 0, -12, 0)
+              drones_global.roam_start_time = time.time() - t0
+        else:
+          set_pos(pt, formation_global[k][0], formation_global[k][1], formation_global[k][2])
+          
       
       # k = drones_global.targets[n-1]
       # print(n, ' ', formation_global[k])
@@ -669,7 +738,7 @@ def mc_example(pt, n, dt, tb):
       # dist = 0
       # dist = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z], formation_global[k])
       # print(dist)
-      global t0
+
       # print(drones_global.formation_assumed)
       # if dist > 0.5 and False in drones_global.formation_assumed:
       #   print('setting pos', formation_global)
