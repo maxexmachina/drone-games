@@ -190,6 +190,7 @@ def loop():
 
     if f_name is not None:
       pub_f.publish(str(i) + ' ' + f_name + ' ' + formations[f_name])
+      # print(str(i) + ' ' + f_name + ' ' + formations[f_name])
       i+=1
 
     rate.sleep()

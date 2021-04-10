@@ -48,6 +48,8 @@ def arguments():
 
   args = parser.parse_args()
   fgen.args = args
+  print("printing args\n\n\n\n\n\n")
+  print(args)
 
   centrals = fgen.read_values("centrals", args.centrals, 3, num_blocks = 2)
   if len(centrals) != len(args.names) + 1:
