@@ -3,7 +3,7 @@
 
 Пакет предназначен для развертывания на Ubuntu 20.04 (Focal Fossa)
 
-Рекомендуется использовать "чистую" ОС с утановленными обновлениями и драйверами (install third-party software for graphics and Wi-Fi harware and additional media formats)
+Рекомендуется использовать "чистую" ОС с установленными обновлениями и драйверами (install third-party software for graphics and Wi-Fi hardware and additional media formats)
 
 Для своей работы использует:
 - библиотеки и окружение ROS Noetic (https://www.ros.org) ([Подробный учебник ROS](http://wiki.ros.org/ROS/Tutorials))
@@ -17,6 +17,11 @@
 - служебные файлы и исполняемые скрипты
 
 Минимальные требования к оборудованию : CPU Intel Core i7 4770, RAM 8Гб, Nvidia GTX650 1Гб
+
+
+Список изменений
+================
+[CHANGELOG](https://github.com/acsl-mipt/drone-games/blob/main/CHANGELOG.md)
 
 
 Подготовка к установке
@@ -62,7 +67,8 @@ git pull
 ./install.sh build
 ```
 
-Во время установки может запросить пароль, поскольку скрипт использует внутри себя команду sudo.
+Во время установки может запросить пароль, поскольку скрипт использует команду sudo.
+В качестве рабочего пространства для использования собственных ROS пакетов, в системе прописывается catkin_ws домашнего каталога (~/catkin_ws).
 После установки необходимо перезапустить терминал для продолжения работы (закрыть и открыть новый)
 
 
@@ -80,7 +86,7 @@ git pull
 ![Start](https://github.com/acsl-mipt/drone-games/blob/main/.imgs/start.png)
 
 
-Отановка
+Остановка
 
 ```
 ./stop.sh
@@ -110,6 +116,9 @@ git pull
 Тестовые задания
 ================
 
-[Тестовое задание по дисциплине Синхронный полет](https://github.com/acsl-mipt/drone-games/blob/main/TASK_1.md)
+[Тестовое задание по дисциплине Синхронный полет](https://github.com/acsl-mipt/drone-games/blob/main/.resources/TASK_1.md)
 
-[Тестовое задание по дисциплине Командная гонка](https://github.com/acsl-mipt/drone-games/blob/main/TASK_2.md)
+[Тестовое задание по дисциплине Командная гонка](https://github.com/acsl-mipt/drone-games/blob/main/.resources/TASK_2.md)
+
+[FAQ](https://github.com/acsl-mipt/drone-games/blob/main/.resources/FAQ.md)
+================================================================
