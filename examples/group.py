@@ -37,8 +37,9 @@ formation_string = "string"
 formation = []
 formation_global = []
 formation_old = []
-keys_old = []
+keys_old = [i for i in range(instances_num)]
 changed_sector = False
+out_of_form = False
 
 
 ref_point1 = np.array([41, -72, 0], dtype='float64')
@@ -496,14 +497,32 @@ def mc_example(pt, n, dt):
 
       global drone_i
       global t0
+      global out_of_form
       k = drones_global.targets[n-1]
       #print('drone_i', drone_i)
       if(drone_i < len(drones_global.order)):
         point_number = drones_global.order[drone_i]
         drone_number = drones_global.targets.index(point_number)
         #print('hello 2')
-        if (n - 1 == drone_number): 
-          set_pos(pt, formation_global[point_number][0], formation_global[point_number][1], formation_global[point_number][2])
+        if (n - 1 == drone_number):
+          if not out_of_form:
+            if drones_global.positions[drone_number].y < 0:
+              set_vel(pt, 12, 0, 0)
+              print('ko', keys_old)
+              k = keys_old[drone_number]
+              dist_from_form = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
+              print('dff', dist_from_form)
+              if (dist_from_form > 25):
+                out_of_form = True
+            else:
+              set_vel(pt, -12, 0, 0)
+              k = keys_old[drone_number]
+              dist_from_form = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
+              print('dff', dist_from_form)
+              if (dist_from_form > 25):
+                out_of_form = True
+          else:
+            set_pos(pt, formation_global[point_number][0], formation_global[point_number][1], formation_global[point_number][2]) 
         elif drones_global.formation_assumed[n -1 ]:
 
           keep_pos_n = drones_global.targets[n - 1]
@@ -522,6 +541,7 @@ def mc_example(pt, n, dt):
         dist = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_global[point_number])
         if (dist < 1000 and drone_i < len(drones_global.order) - 1) or dist < 0.5:
           drone_i += 1
+          out_of_form = False
           drones_global.formation_assumed[drone_number] = True
           #print('fa', drones_global.formation_assumed)
       else:
