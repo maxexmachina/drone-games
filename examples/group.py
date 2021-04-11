@@ -5,6 +5,7 @@ import rospy
 import time
 import sys
 import math
+import argparse
 import numpy as np
 
 from sensor_msgs.msg import NavSatFix
@@ -21,7 +22,13 @@ from sympy import Point3D, Line3D, Ray3D, Segment3D, Plane
 from enum import Enum, auto
 from simple_pid import PID
 
-instances_num = 6 #количество аппаратов
+
+parser = argparse.ArgumentParser(description='Number of drones')
+parser.add_argument('num_drones', metavar='N', type=int,
+                    help='number of drones')
+args = parser.parse_args()
+
+instances_num = args.num_drones #количество аппаратов
 freq = 20 #Герц, частота посылки управляющих команд аппарату
 node_name = "offboard_node"
 data = {}

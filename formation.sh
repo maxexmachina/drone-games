@@ -23,6 +23,6 @@ fi
 ./start.sh $model $num gazebo/worlds/formation.world --ref_point 0,-72,0.1 $arg $@
 
 if [ "$1" == "prof" ]; then
-  ./bin/formations_gen.py $model $num formation/borders.txt formation/test_fs/ --names T E C T &
-  ./examples/group.py
+  ./bin/formations_gen.py $model $num formation/borders.txt formation/test_fs/ --names BOX &
+  ./examples/group.py $num
 fi

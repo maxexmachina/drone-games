@@ -11,7 +11,7 @@ from std_msgs.msg import String
 from gazebo_msgs.msg import ModelStates
 
 freq = 2
-fs_num = 4
+fs_num = 1
 plane_pos={}
 formations = {}
 
