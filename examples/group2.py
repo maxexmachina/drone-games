@@ -27,8 +27,10 @@ parser = argparse.ArgumentParser(description='Number of drones')
 parser.add_argument('num_drones', metavar='N', type=int,
                     help='number of drones')
 args = parser.parse_args()
+print('args', args)
 
 instances_num = args.num_drones #количество аппаратов
+print('num', instances_num)
 freq = 20 #Герц, частота посылки управляющих команд аппарату
 node_name = "offboard_node"
 data = {}
@@ -37,8 +39,9 @@ formation_string = "string"
 formation = []
 formation_global = []
 formation_old = []
+#keys_old = [i for i in range(instances_num)]
 keys_old = []
-changed_sector = False
+out_of_form = False
 
 
 ref_point1 = np.array([41, -72, 0], dtype='float64')
@@ -116,7 +119,6 @@ class Drones:
         self.drones.append(Drone(Point3D([pos.x, pos.y, pos.z])))
         
   def setCurrentState(self):
-    global changed_sector
     turnCounter = 0
     # Potential bug
     # for pos in self.positions:
@@ -125,8 +127,6 @@ class Drones:
     #print('pos in setstate', pos)
 
     if (pos.y < -62 or pos.y > 62) and not self.are_ready:
-      if self.cur_state == States.ROAM:
-        changed_sector = True
       self.cur_state = States.TRANSITION
       #print("changing to transition")
     else:
@@ -167,7 +167,6 @@ class Drones:
     
 
   def find_optimal(self):
-    global formation_old
     if self.positions[0].y < -62 or (np.abs(self.positions[0].x) < 5 and self.positions[0].y <= 0):
       self.ref_point = ref_point1
       # print('recheck')
@@ -179,8 +178,8 @@ class Drones:
     formation_global = change_coor_system(self.ref_point)
     form_cur = [drones_global.positions[i] for i in range(len(drones_global.positions))]
     form_next = [formation_global[i] for i in range(len(formation_global))]
-    print('forn_cur', form_cur)
-    print('forn_next', form_next)
+    # print('forn_cur', form_cur)
+    # print('forn_next', form_next)
     f1 = lambda p: np.abs(p.x)
     f2 = lambda p: -np.abs(p[0])
     
@@ -195,24 +194,15 @@ class Drones:
   #     return 0
     form_cur_sorted = sorted(form_cur, key=f1)
     form_next_sorted = sorted(form_next, key=f2)
-    print('forn_cur_sorted', form_cur_sorted)
-    print('forn_next_sorted', form_next_sorted)
+    # print('forn_cur_sorted', form_cur_sorted)
+    # print('forn_next_sorted', form_next_sorted)
     
 
     drone_numbers = [form_cur.index(form_cur_sorted[i]) for i in range(len(form_cur))]
-    print('dn', drone_numbers)
     #self.order = drone_numbers.copy()
     #self.order.reverse()
-    #self.targets = [form_next.index(form_next_sorted[drone_numbers.index(dn)]) for dn in drone_numbers]
-    drone_number_indexes = [drone_numbers.index(i) for i in drone_numbers]
-    self.targets = [0]*instances_num
-    for i in range(len(drone_numbers)):
-      drone_number_for_i_pos = drone_numbers[i] #8
-      index_of_point = form_next.index(form_next_sorted[i]) #i = 0 index of the most far point
-      self.targets[drone_number_for_i_pos] = index_of_point
-
-    #self.targets = [form_next.index(form_next_sorted[dn]) for dn in drone_number_indexes]
-    print('targets', self.targets)
+    self.targets = [form_next.index(form_next_sorted[dn]) for dn in drone_numbers]
+    # print('targets', self.targets)
 
   def find_distance(self, p1, p2):
     #TODO: Добавить учет разницы скоростей по направлениям
@@ -262,9 +252,9 @@ def formation_cb(msg):
   global formation_global
   global formation
   global coor_changed
-  global changed_sector
   msg = str(msg)
   msg_ar = msg.split(' ')[3:]
+  #print('msg', msg)
   msg_ar2 = []
   for i in msg_ar:
     if not(i == '' or i[-1] == '\\' or i[-1]=='\n'):
@@ -280,11 +270,27 @@ def formation_cb(msg):
           check = True
       if (i!=''):
         msg_ar2.append(i)
+      
+    # if i == '':
+
+    #   #print('empty')
+    # elif i[-1]=='\n':
+    #   #print('new ')
+    # elif i[-1] == '\\':
+    #   #print('back')
+    # else:
+    #   print('norm', i)
+      
+  #print('cleaned', msg_ar2)
+  #msg = msg.strip('\n')
+  #print('msg 2', msg)
+  #msg = msg.strip('\\')
+  #print('msg 3', msg)
   #msg_ar = []
-  msg_ar = msg_ar2.copy()
-  if formation_ar != msg_ar or changed_sector:
-    print("changing form")
-    changed_sector = False
+  #msg_ar = msg_ar2.copy()
+  #print('msg_ar',msg_ar)
+  if formation_ar != msg_ar:
+
     coor_changed = False
     formation_ar = msg_ar
     formation_string = msg
@@ -293,7 +299,7 @@ def formation_cb(msg):
    
     formation = []
     for i in range(instances_num):
-      formation.append([float(j.strip('\"')) for j in formation_temp[i*3:(i+1)*3]])
+      formation.append([float(j.strip('\"\n\\')) for j in formation_temp[i*3:(i+1)*3]])
 
     coor_changed = False
     formation_global = change_coor_system(drones_global.ref_point)
@@ -411,7 +417,7 @@ def mc_example(pt, n, dt):
     pass
   if dt>5:
     arming(n, True)
-  if dt> 5 and dt < 15 and len(drones_global.positions) == instances_num:
+  if dt> 5 and dt < 10 and len(drones_global.positions) == instances_num:
     set_vel(pt, 0, 0, 1)
     #set_pos(pt, 0, n*3 - 90, 5)
     formation_old = [[drones_global.positions[i].x, drones_global.positions[i].y, drones_global.positions[i].z + 5] for i in range(instances_num)]
@@ -421,7 +427,7 @@ def mc_example(pt, n, dt):
     formation_global = change_coor_system(ref_point1)
   # print('fg', formation_global)
 
-  if dt>15 and len(drones_global.positions) == instances_num:
+  if dt>10 and len(drones_global.positions) == instances_num:
     #print(drones_global.cur_state)
     if drones_global.cur_state == States.ROAM:
       # print("roam")
@@ -496,46 +502,66 @@ def mc_example(pt, n, dt):
 
       global drone_i
       global t0
+      global out_of_form
       k = drones_global.targets[n-1]
-      #print('drone_i', drone_i)
+      # print('drone_i', drone_i)
       if(drone_i < len(drones_global.order)):
         point_number = drones_global.order[drone_i]
         drone_number = drones_global.targets.index(point_number)
-        #print('hello 2')
+        # print('hello 2')
         if (n - 1 == drone_number): 
-          set_pos(pt, formation_global[point_number][0], formation_global[point_number][1], formation_global[point_number][2])
+          if (False):#(not out_of_form):
+            if drones_global.positions[drone_number].y < 0:
+              set_vel(pt, 12, 0, 0)
+              print('ko', keys_old)
+              k = keys_old[drone_number]
+              dist_from_form = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
+              print('dff', dist_from_form)
+              if (dist_from_form > 25):
+                out_of_form = True
+            else:
+              set_vel(pt, -12, 0, 0)
+              k = keys_old[drone_number]
+              dist_from_form = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
+              print('dff', dist_from_form)
+              if (dist_from_form > 25):
+                out_of_form = True
+          else:
+            set_pos(pt, formation_global[point_number][0], formation_global[point_number][1], formation_global[point_number][2])
         elif drones_global.formation_assumed[n -1 ]:
 
           keep_pos_n = drones_global.targets[n - 1]
           set_pos(pt, formation_global[keep_pos_n][0], formation_global[keep_pos_n][1], formation_global[keep_pos_n][2])
           # print('fg', keep_pos_n,  formation_global[keep_pos_n])
         else:
-          #print("abs", np.abs(drones_global.positions[n-1].x))
+          # print("abs", np.abs(drones_global.positions[n-1].x))
           if np.abs(drones_global.positions[n-1].x) < 10:
+            #keys_old = [j for j in range(instances_num)]
             set_pos(pt, formation_old[n-1][0], formation_old[n-1][1], formation_old[n-1][2])
           else:
-            #print("hello")
+            # print("hello")
             k = keys_old[n - 1]
-            # print(formation_old)
+            print(formation_old)
             set_pos(pt, formation_old[k][0], formation_old[k][1], formation_old[k][2])
         
         dist = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_global[point_number])
         if (dist < 1000 and drone_i < len(drones_global.order) - 1) or dist < 0.5:
           drone_i += 1
+          out_of_form = False
           drones_global.formation_assumed[drone_number] = True
-          #print('fa', drones_global.formation_assumed)
+          print('fa', drones_global.formation_assumed)
       else:
         k = drones_global.targets[n-1]
         if all(drones_global.formation_assumed):
           dist = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1 ].y, drones_global.positions[n-1].z], formation_global[k])
           if dist < 0.5:
-            #print(n, 'reached')
+            print(n, 'reached')
             drones_global.formation_reached[n-1] = True
           else:
             set_pos(pt, formation_global[k][0], formation_global[k][1], formation_global[k][2])
 
           if all(drones_global.formation_reached):
-            #print("all in formation")
+            print("all in formation")
             drone_i = 0
             if drones_global.positions[0].y < -62:
               drones_global.are_ready = True
@@ -544,7 +570,7 @@ def mc_example(pt, n, dt):
               formation_old = formation_global.copy()
               formation_old = [[p[0], p[1] + 144, p[2]] for p in formation_old]
               keys_old = drones_global.targets.copy()
-              #print('fotop', formation_old)
+              print('fotop', formation_old)
 
               drones_global.roam_start_time = time.time() - t0
             else:
@@ -553,7 +579,7 @@ def mc_example(pt, n, dt):
               formation_old = formation_global.copy()
               formation_old = [[p[0], p[1] - 144, p[2]] for p in formation_old]
               keys_old = drones_global.targets.copy()
-              #print('fobot', formation_old)
+              print('fobot', formation_old)
 
               drones_global.are_ready = True
               drones_global.roam_start_time = time.time() - t0
@@ -580,10 +606,7 @@ def offboard_loop(mode):
     dt = time.time() - t0
     try:
       global drones_global
-      global changed_sector
       drones_global.setCurrentState()
-      print(drones_global.cur_state)
-      print('changed_sec', changed_sector)
     except Exception:
       print("Exception in offboard loop")
 
