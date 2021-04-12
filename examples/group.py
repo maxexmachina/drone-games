@@ -242,8 +242,8 @@ def change_coor_system(ref_point):
   turned_formation = [formation[i].copy() for i in range(len(formation))]
   
 
-  for i in turned_formation:
-    i[0], i[1] = i[1], i[0]
+  # for i in turned_formation:
+  #   i[0], i[1] = i[1], i[0]
   for i in range(instances_num):
     formation_global.append([turned_formation[i][j] + ref_point[j]  for j in range(3)])
   return formation_global
