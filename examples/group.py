@@ -13,15 +13,12 @@ from geometry_msgs.msg import TwistStamped, PoseStamped, Point
 from mavros_msgs.msg import PositionTarget, State, ExtendedState
 from std_msgs.msg import String
 from geographic_msgs.msg import GeoPointStamped
-import matplotlib.pyplot as plt
 
 from mavros_msgs.srv import SetMode, CommandBool, CommandVtolTransition, CommandHome
 
-from munkres import Munkres, print_matrix 
 from sympy import Point3D, Line3D, Ray3D, Segment3D, Plane
 from enum import Enum, auto
 from simple_pid import PID
-
 
 parser = argparse.ArgumentParser(description='Number of drones')
 parser.add_argument('num_drones', metavar='N', type=int,
