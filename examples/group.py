@@ -63,8 +63,8 @@ class Drone:
     self.pid_x = PID(1.2, 0, 0, setpoint=self.target_point[0])
     self.pid_y = PID(1.2, 0, 0, setpoint=self.target_point[1])
     self.pid_z = PID(1.2, 0, 0, setpoint=self.target_point[2])
-    self.pid_x.output_limits = (-12, 12)
-    self.pid_y.output_limits = (-12, 12)
+    self.pid_x.output_limits = (-15, 15)
+    self.pid_y.output_limits = (-15, 15)
     self.pid_z.output_limits = (-1, 3)
     self.pid_x.sample_time = 0.01
     self.pid_y.sample_time = 0.01
@@ -95,7 +95,7 @@ class Drones:
 
     self.cur_state = States.TRANSITION
     self.cur_direction = [1, 0, 0]
-    self.speed = 10
+    self.speed = 12
     self.formation_assumed = [False] * instances_num
     self.formation_reached = [False] * instances_num
     self.ref_point = np.array([0, 0, 0], dtype='float64')
@@ -419,7 +419,7 @@ def mc_example(pt, n, dt):
     pass
   if dt>5:
     arming(n, True)
-  if dt> 5 and dt < 10 and len(drones_global.positions) == instances_num:
+  if dt> 5 and dt < 7 and len(drones_global.positions) == instances_num:
     set_vel(pt, 0, 0, 1)
     #set_pos(pt, 0, n*3 - 90, 5)
     formation_old = [[drones_global.positions[i].x, drones_global.positions[i].y, drones_global.positions[i].z + 5] for i in range(instances_num)]
@@ -429,7 +429,7 @@ def mc_example(pt, n, dt):
     formation_global = change_coor_system(ref_point1)
   # print('fg', formation_global)
 
-  if dt>10 and len(drones_global.positions) == instances_num:
+  if dt>7 and len(drones_global.positions) == instances_num:
     #print(drones_global.cur_state)
     if drones_global.cur_state == States.ROAM:
       # print("roam")
@@ -524,18 +524,18 @@ def mc_example(pt, n, dt):
                 k = keys_old[drone_number]
                 dist_from_form = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
                 print('dff', dist_from_form)
-                if (dist_from_form > 25):
+                if (dist_from_form > 15):
                   out_of_form = True
               else:
                 set_vel(pt, -12, 0, 0)
                 k = keys_old[drone_number]
                 dist_from_form = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
                 print('dff', dist_from_form)
-                if (dist_from_form > 25):
+                if (dist_from_form > 15):
                   out_of_form = True
             else:
               set_pos(pt, formation_global[point_number][0], formation_global[point_number][1], formation_global[point_number][2]) 
-          elif drones_global.formation_assumed[n -1 ]:
+          elif drones_global.formation_assumed[ n -1 ]:
 
             keep_pos_n = drones_global.targets[n - 1]
             set_pos(pt, formation_global[keep_pos_n][0], formation_global[keep_pos_n][1], formation_global[keep_pos_n][2])
@@ -550,8 +550,18 @@ def mc_example(pt, n, dt):
               # print(formation_old)
               set_pos(pt, formation_old[k][0], formation_old[k][1], formation_old[k][2])
           
+          if np.abs(drones_global.positions[drone_number].x) < 10:
+            dist_from_old = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[drone_number])
+          else:
+            k = keys_old[drone_number]
+            dist_from_old = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
+
+          print('dold', dist_from_old)
+
           dist = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_global[point_number])
-          if (dist < 1500 and drone_i < len(drones_global.order) - 1) or dist < 0.5:
+
+
+          if (dist_from_old > 200 and drone_i < len(drones_global.order) - 1) or dist < 0.5:
             drone_i += 1
             out_of_form = False
             drones_global.formation_assumed[drone_number] = True
