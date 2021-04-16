@@ -46,9 +46,13 @@ t0 = 0
 drone_i = 0
 coor_changed = False
 
+
+
 class States(Enum):
     ROAM = auto()
     TRANSITION = auto()
+
+
 
 class Drone:
   def __init__(self, position, size=5):
@@ -56,39 +60,23 @@ class Drone:
     #self.velocity_mod = 0 #Скорость
     self.size = size #Размер
     self.target_point = [0, 0, 0]
-    self.pid_x = PID(1.5, 0, 0, setpoint=self.target_point[0])
-    self.pid_y = PID(1.5, 0, 0, setpoint=self.target_point[1])
-    self.pid_z = PID(1.5, 0, 0, setpoint=self.target_point[2])
-    self.pid_x.output_limits = (-12, 12)
-    self.pid_y.output_limits = (-12, 12)
+    self.pid_x = PID(1.2, 0, 0, setpoint=self.target_point[0])
+    self.pid_y = PID(1.2, 0, 0, setpoint=self.target_point[1])
+    self.pid_z = PID(1.2, 0, 0, setpoint=self.target_point[2])
+    self.pid_x.output_limits = (-15, 15)
+    self.pid_y.output_limits = (-15, 15)
     self.pid_z.output_limits = (-1, 3)
     self.pid_x.sample_time = 0.01
     self.pid_y.sample_time = 0.01
     self.pid_z.sample_time = 0.01
-    self.start_time = None
-    self.crossed_transition = True
     
 
   def setTarget(self, target):
     #Функция задания целевой точки
     self.target = target
-    print('\n&&&&&&')
-    print('tg', self.target)
-    print('pos', self.position)
-    
-    direction = [self.target[0] - self.position[0], self.target[1] - self.position[1], self.target[2] - self.position[2] ]
-    norm = np.linalg.norm([float(direction[i]) for i in range(3)])
-    self.direction = direction / norm
-    print('dir in set', self.direction)
-    print('&&&&&&\n')
+    #direction = [self.target[0] - self.position[0], self.target[1] - self.position[1], self.target[2] - self.position[2] ]
     #self.velocity = Vector3D(direction)
     #self.velocity_mod = self.velocity.length()
-
-  def updDirection(self):
-    direction = [self.target[0] - self.position[0], self.target[1] - self.position[1], self.target[2] - self.position[2] ]
-    norm = np.linalg.norm([float(direction[i]) for i in range(3)])
-    self.direction = direction / norm
-
 
 class Drones:
   def __init__(self, data):
@@ -104,7 +92,6 @@ class Drones:
     self.targets = []
     self.drones = []
     self.are_ready = False
-    self.reached_formation_old = [True] * instances_num
 
     self.cur_state = States.TRANSITION
     self.cur_direction = [1, 0, 0]
@@ -117,8 +104,6 @@ class Drones:
     try:
       for i in range(self.numberOfDrones):
         self.positions.append(data[i+1]['local_position/pose'].pose.position)
-      for i in range(len(self.drones)):
-        self.drones[i].position = [self.positions[i].x,self.positions[i].y,self.positions[i].z]
       self.matrix = np.zeros((instances_num, instances_num))
     except Exception:
       print('exception in drones init')
@@ -134,50 +119,37 @@ class Drones:
     turnCounter = 0
     # Potential bug
     # for pos in self.positions:
-    #pos = self.positions[0]
-    check_arr = [False] * instances_num
-    for i in range(instances_num):
-      if (self.positions[i].y < -62 or self.positions[i].y > 62) and not self.are_ready:
-        check_arr[i] = True
+    pos = self.positions[0]
     # print('areready', self.are_ready)
     #print('pos in setstate', pos)
-    # print('self pos', self.positions)
-    # print('ca', check_arr)
-    if all(check_arr) and all(self.reached_formation_old):
-      self.reached_formation_old = [False] * instances_num
+
+    if (pos.y < -62 or pos.y > 62) and not self.are_ready:
       if self.cur_state == States.ROAM:
         changed_sector = True
-        
       self.cur_state = States.TRANSITION
-      for drone in self.drones:
-        drone.pid_y.Kd = 0
-
-      print("changing to transition")
-    elif not any(check_arr):
-      if self.cur_state == States.TRANSITION:
-        for drone in self.drones:
-          drone.crossed_transition = False
+      #print("changing to transition")
+    else:
       self.cur_state = States.ROAM
-      print("changing to roam")
+      #print("changing to roam")
 
 
   def build_order(self):
     global ref_point1
     global ref_point2
     order_def = [i for i in range(instances_num)]
-    #print('building order', formation_global)
+    print('building order', formation_global)
     if (self.ref_point[1] == ref_point1[1]):
       sort_func = lambda i: -formation_global[i][0]
-      #print('rf1')
+      print('rf1')
     elif self.ref_point[1] == ref_point2[1]:
       sort_func = lambda i: formation_global[i][0]
-      #print('rf2')
+      print('rf2')
     else:
-      #print('wrong ref point')
+      print('wrong ref point')
       return 0
-    #print('keys', [formation_global[i][0] for i in range(len(order_def))])
+    print('keys', [formation_global[i][0] for i in range(len(order_def))])
     self.order =  sorted(order_def, key=sort_func) 
-    #print('sorted build', self.order) 
+    print('sorted build', self.order) 
   
   def processMatrix(self):
     self.find_optimal()
@@ -190,15 +162,10 @@ class Drones:
     self.numberOfDrones = len(data.keys())
     for i in range(self.numberOfDrones):
       self.positions[i] = data[i+1]['local_position/pose'].pose.position
-    for i in range(len(self.drones)):
-      self.drones[i].position = [self.positions[i].x,self.positions[i].y,self.positions[i].z]
-      
+  
     
 
   def find_optimal(self):
-    print('!!!!\n')
-    print('find optimal')
-    print('!!!!\n')
     global formation_old
     if self.positions[0].y < -62 or (np.abs(self.positions[0].x) < 5 and self.positions[0].y <= 0):
       self.ref_point = ref_point1
@@ -211,7 +178,9 @@ class Drones:
     formation_global = change_coor_system(self.ref_point)
     form_cur = [drones_global.positions[i] for i in range(len(drones_global.positions))]
     form_next = [formation_global[i] for i in range(len(formation_global))]
+    
     print('forn_cur', form_cur)
+    print('forn_next', form_next)
     if (formation_global[0][0] > 0):
       shift = 20
     else:
@@ -231,12 +200,12 @@ class Drones:
   #     return 0
     form_cur_sorted = sorted(form_cur, key=f1)
     form_next_sorted = sorted(form_next, key=f2)
-    # print('forn_cur_sorted', form_cur_sorted)
-    # print('forn_next_sorted', form_next_sorted)
+    print('forn_cur_sorted', form_cur_sorted)
+    print('forn_next_sorted', form_next_sorted)
     
 
     drone_numbers = [form_cur.index(form_cur_sorted[i]) for i in range(len(form_cur))]
-    # print('dn', drone_numbers)
+    print('dn', drone_numbers)
     #self.order = drone_numbers.copy()
     #self.order.reverse()
     #self.targets = [form_next.index(form_next_sorted[drone_numbers.index(dn)]) for dn in drone_numbers]
@@ -248,7 +217,7 @@ class Drones:
       self.targets[drone_number_for_i_pos] = index_of_point
 
     #self.targets = [form_next.index(form_next_sorted[dn]) for dn in drone_number_indexes]
-    # print('targets', self.targets)
+    print('targets', self.targets)
 
   def find_distance(self, p1, p2):
     #TODO: Добавить учет разницы скоростей по направлениям
@@ -302,9 +271,9 @@ def formation_cb(msg):
   global is_finished
 
   msg = str(msg)
-  # print(msg)
+  print(msg)
   name = msg.strip('\"').split(' ')[-1]
-  # print(name)
+  print(name)
   msg_ar = msg.split(' ')[3:]
   msg_ar2 = []
   if (name == '|'):
@@ -327,7 +296,7 @@ def formation_cb(msg):
           msg_ar2.append(i)
     #msg_ar = []
     msg_ar = msg_ar2.copy()
-    if (formation_ar != msg_ar or changed_sector) and drones_global.cur_state == States.TRANSITION :
+    if formation_ar != msg_ar or changed_sector:
       print("changing form")
       changed_sector = False
       coor_changed = False
@@ -349,22 +318,8 @@ def formation_cb(msg):
 
       for i in range(instances_num):
         formation[i] = [formation[i][0] - x_c, formation[i][1] - y_c, formation[i][2] - z_c]
-
-      print('form before', formation)
-      if len(drones_global.positions) > 0:
-        print('pos0', drones_global.positions[0])
-      if len(drones_global.positions) > 0 and drones_global.positions[0].x > 0 and drones_global.positions[0].y > 40:
-        for i in range(instances_num):
-          print('changing')
-          formation[i] = [ (-1)*formation[i][0], (-1)*formation[i][1], formation[i][2]]
-
-      # except Exception:
-      #   print("exception in formation cb")
-      print('form after', formation)
-        
       
       print('form', formation)
-
       coor_changed = False
       formation_global = change_coor_system(drones_global.ref_point)
       if not drones_global.exist:
@@ -479,12 +434,12 @@ def mc_example(pt, n, dt):
     # print(drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z)
   except Exception:
     pass
-  if dt > 5:
+  if dt>5:
     arming(n, True)
   if dt> 5 and dt < 10 and len(drones_global.positions) == instances_num:
     set_vel(pt, 0, 0, 1)
     #set_pos(pt, 0, n*3 - 90, 5)
-    formation_old = [[drones_global.positions[i].x, drones_global.positions[i].y, 2] for i in range(instances_num)]
+    formation_old = [[drones_global.positions[i].x, drones_global.positions[i].y, drones_global.positions[i].z + 5] for i in range(instances_num)]
     #print('fo0', formation_old)
     drones_global.ref_point = ref_point1
   # print('rf1', ref_point1)
@@ -502,80 +457,61 @@ def mc_example(pt, n, dt):
       
       if drones_global.positions[0].x > 0:
         if drones_global.positions[0].y > 0:
+          # if np.abs(drones_global.positions[0].y) < 0.5:
           drones_global.are_ready = False
 
         drones_global.cur_direction = [0, 1, 0]
 
+        k = drones_global.targets[n-1]
+        # print(drones_global.roam_start_time)
         drones_global.ref_point = ref_point1 + np.array(drones_global.cur_direction, dtype='float64') * float(drones_global.speed) * 0.83 * (dt - drones_global.roam_start_time)
         formation_global = change_coor_system(drones_global.ref_point)
 
-        if drones_global.drones[n - 1].position[1] > 58:
-          drones_global.drones[n - 1].crossed_transition = True
-          drones_global.drones[n-1].target_point = formation_old[keys_old[ n - 1 ]]
-          # drones_global.drones[n - 1].pid_y.Kp = 2
-          drones_global.drones[n - 1].pid_y.Kd = 0.5
-          #set_pos(pt, formation_global[k][0], formation_global[k][1] + 144, formation_global[k][2])
-
-          k = keys_old[n-1]
-          dist = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z], formation_old[k])
-          if dist < 0.5:
-            drones_global.reached_formation_old[n-1] = True
-  
-        else:
-          k = drones_global.targets[n-1]
-          #dist = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z], formation_global[k])
-          drones_global.drones[n-1].target_point = formation_global[k]
-          drones_global.drones[n - 1].pid_y.Kd = 0
+        dist = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z], formation_global[k])
+        drones_global.drones[n-1].target_point = formation_global[k]
         drones_global.drones[n-1].pid_x.setpoint = drones_global.drones[n-1].target_point[0]
         drones_global.drones[n-1].pid_y.setpoint = drones_global.drones[n-1].target_point[1]
         drones_global.drones[n-1].pid_z.setpoint = drones_global.drones[n-1].target_point[2]
 
+        # print(n, ' ', formation_global[k])
+        # print(n, 'delta ', drones_global.positions[n-1].y - formation_global[k][1])
         vel_x = drones_global.drones[n-1].pid_x(drones_global.positions[n-1].x)
         vel_y = drones_global.drones[n-1].pid_y(drones_global.positions[n-1].y)
         vel_z = drones_global.drones[n-1].pid_z(drones_global.positions[n-1].z)
-        
+        # print(n, 'vel ', vel_x, vel_y, vel_z)
+
+        #set_vel(pt, drones_global.speed * drones_global.cur_direction[0] + vel_x, drones_global.speed * drones_global.cur_direction[1] + vel_y, drones_global.speed * drones_global.cur_direction[2] + vel_z)
         set_vel(pt, vel_x, vel_y, vel_z)
+        #set_pos(pt, formation_global[k][0], formation_global[k][1] + 144, formation_global[k][2])
+        # print('target_pt', formation_global[k][0], formation_global[k][1] + 144, formation_global[k][2])
 
       else:
         if drones_global.positions[0].y < 0:
+          # if np.abs(drones_global.positions[0].y) < 0.5:
           drones_global.are_ready = False
 
 
         drones_global.cur_direction = [0, -1, 0]
+        k = drones_global.targets[n-1]
 
         drones_global.ref_point = ref_point2 + np.array(drones_global.cur_direction, dtype='float64') * float(drones_global.speed) * 0.83 * (dt - drones_global.roam_start_time)
         # print('rf', drones_global.ref_point)
         formation_global = change_coor_system(drones_global.ref_point)
 
-        if drones_global.drones[n - 1].position[1] < -58:
-          drones_global.drones[n - 1].crossed_transition = True
-          drones_global.drones[n-1].target_point = formation_old[keys_old[ n - 1 ]]
-          # drones_global.drones[n - 1].pid_y.Kp = 2
-          drones_global.drones[n - 1].pid_y.Kd = 0.5
-          #set_pos(pt, formation_global[k][0], formation_global[k][1] + 144, formation_global[k][2])
-
-          k = keys_old[n-1]
-          dist = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z], formation_old[k])
-          if dist < 0.5:
-            drones_global.reached_formation_old[n-1] = True
-  
-        else:
-          k = drones_global.targets[n-1]
-          #dist = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z], formation_global[k])
-          drones_global.drones[n-1].target_point = formation_global[k]
-          drones_global.drones[n - 1].pid_y.Kd = 0
+        dist = drones_global.find_distance([drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z], formation_global[k])
+        drones_global.drones[n-1].target_point = formation_global[k]
         drones_global.drones[n-1].pid_x.setpoint = drones_global.drones[n-1].target_point[0]
         drones_global.drones[n-1].pid_y.setpoint = drones_global.drones[n-1].target_point[1]
         drones_global.drones[n-1].pid_z.setpoint = drones_global.drones[n-1].target_point[2]
 
+      
         vel_x = drones_global.drones[n-1].pid_x(drones_global.positions[n-1].x)
         vel_y = drones_global.drones[n-1].pid_y(drones_global.positions[n-1].y)
         vel_z = drones_global.drones[n-1].pid_z(drones_global.positions[n-1].z)
-        
         set_vel(pt, vel_x, vel_y, vel_z)
 
     else:
-      
+
       if is_finished:
         k = keys_old[n - 1]
             # print(formation_old)
@@ -596,96 +532,54 @@ def mc_example(pt, n, dt):
         if(drone_i < len(drones_global.order)):
           point_number = drones_global.order[drone_i]
           drone_number = drones_global.targets.index(point_number)
-            
           #print('hello 2')
           if (n - 1 == drone_number):
-            if drones_global.drones[drone_number].start_time == None:
-              drones_global.drones[drone_number].start_time = time.time()
-
-            drones_global.drones[drone_number].updDirection()
-            drones_global.drones[n-1].pid_x.Kd = 0.5
-
-
-            if np.abs(drones_global.positions[drone_number].x) < 10:
-              new_target = formation_old[n-1] + drones_global.drones[n-1].direction * drones_global.speed * 0.83 * (time.time() - drones_global.drones[n-1].start_time)
-              if (np.abs(new_target[0]) > np.abs(drones_global.drones[n-1].target[0])) and (new_target[0]*drones_global.drones[n-1].target[0] > 0):
-                new_target = drones_global.drones[n-1].target
-              drones_global.drones[n-1].target_point = new_target
-              # print('dn form old', drone_number, formation_old[n-1])
+            if not out_of_form:
+              if drones_global.positions[drone_number].y < 0:
+                set_vel(pt, 12, 0, 0)
+                print('ko', keys_old)
+                k = keys_old[drone_number]
+                dist_from_form = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
+                print('dff', dist_from_form)
+                if (dist_from_form > 15):
+                  out_of_form = True
+              else:
+                set_vel(pt, -12, 0, 0)
+                k = keys_old[drone_number]
+                dist_from_form = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
+                print('dff', dist_from_form)
+                if (dist_from_form > 15):
+                  out_of_form = True
             else:
-              k = keys_old[drone_number]
-              new_target = formation_old[k] + drones_global.drones[n-1].direction * drones_global.speed * 0.83 * (time.time() - drones_global.drones[n-1].start_time)
-              if np.abs(new_target[0]) > np.abs(drones_global.drones[n-1].target[0]) and new_target[0]*drones_global.drones[n-1].target[0] > 0:
-                new_target = drones_global.drones[n-1].target
-
-              drones_global.drones[n-1].target_point = new_target
-              # print('dn form old', drone_number,  formation_old[k])
-
-            # print('tp', n-1, drones_global.drones[n-1].target_point)
-
-            drones_global.drones[n-1].pid_x.setpoint = drones_global.drones[n-1].target_point[0]
-            drones_global.drones[n-1].pid_y.setpoint = drones_global.drones[n-1].target_point[1]
-            drones_global.drones[n-1].pid_z.setpoint = drones_global.drones[n-1].target_point[2]
-
-            # print('dn pos', drone_number, drones_global.drones[n-1].position)
-            # print('dn form', drone_number, drones_global.drones[n-1].target)
-            # print('dn dir', drones_global.drones[n-1].direction)
-
-            
-            vel_x = drones_global.drones[n-1].pid_x(drones_global.positions[n-1].x)
-            vel_y = drones_global.drones[n-1].pid_y(drones_global.positions[n-1].y)
-            vel_z = drones_global.drones[n-1].pid_z(drones_global.positions[n-1].z)
-            set_vel(pt, vel_x, vel_y, vel_z)
-
+              set_pos(pt, formation_global[point_number][0], formation_global[point_number][1], formation_global[point_number][2]) 
           elif drones_global.formation_assumed[ n -1 ]:
-            
-            keep_pos_n = drones_global.targets[n - 1]
-            drones_global.drones[n-1].pid_x.setpoint = formation_global[keep_pos_n][0]
-            drones_global.drones[n-1].pid_y.setpoint = formation_global[keep_pos_n][1]
-            drones_global.drones[n-1].pid_z.setpoint = formation_global[keep_pos_n][2]
-            
 
-            vel_x = drones_global.drones[n-1].pid_x(drones_global.positions[n-1].x)
-            vel_y = drones_global.drones[n-1].pid_y(drones_global.positions[n-1].y)
-            vel_z = drones_global.drones[n-1].pid_z(drones_global.positions[n-1].z)
-            set_vel(pt, vel_x, vel_y, vel_z)
-            #set_pos(pt, formation_global[keep_pos_n][0], formation_global[keep_pos_n][1], formation_global[keep_pos_n][2])
+            keep_pos_n = drones_global.targets[n - 1]
+            set_pos(pt, formation_global[keep_pos_n][0], formation_global[keep_pos_n][1], formation_global[keep_pos_n][2])
             # print('fg', keep_pos_n,  formation_global[keep_pos_n])
           else:
             #print("abs", np.abs(drones_global.positions[n-1].x))
             if np.abs(drones_global.positions[n-1].x) < 10:
               set_pos(pt, formation_old[n-1][0], formation_old[n-1][1], formation_old[n-1][2])
-              
             else:
-              # print("hello")
+              #print("hello")
               k = keys_old[n - 1]
-              #drones_global.drones[n - 1].pid_y.output_limits =(-2, 2)
-              drones_global.drones[n-1].pid_x.Kd = 0.5
               # print(formation_old)
-              drones_global.drones[n-1].pid_x.setpoint = formation_old[k][0]
-              drones_global.drones[n-1].pid_y.setpoint = formation_old[k][1]
-              drones_global.drones[n-1].pid_z.setpoint = formation_old[k][2]
-              
-
-              vel_x = drones_global.drones[n-1].pid_x(drones_global.positions[n-1].x)
-              vel_y = drones_global.drones[n-1].pid_y(drones_global.positions[n-1].y)
-              vel_z = drones_global.drones[n-1].pid_z(drones_global.positions[n-1].z)
-              set_vel(pt, vel_x, vel_y, vel_z)
-              #set_pos(pt, formation_old[k][0], formation_old[k][1], formation_old[k][2])
+              set_pos(pt, formation_old[k][0], formation_old[k][1], formation_old[k][2])
           
           if np.abs(drones_global.positions[drone_number].x) < 10:
-            k = keys_old[drone_number]
-            #print('fold', formation_old)
-            dist_from_old = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
+            dist_from_old = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[drone_number])
           else:
             k = keys_old[drone_number]
             dist_from_old = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_old[k])
 
-          # print('dold', drone_number, dist_from_old)
+          # print('dold', dist_from_old)
+
 
           dist = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_global[point_number])
 
-          if (dist_from_old > 3 and drone_i < len(drones_global.order) - 1) or dist < 0.5:
+
+          if (dist_from_old > 200 and drone_i < len(drones_global.order) - 1) or dist < 0.5:
             drone_i += 1
             out_of_form = False
             drones_global.formation_assumed[drone_number] = True
@@ -701,13 +595,7 @@ def mc_example(pt, n, dt):
               set_pos(pt, formation_global[k][0], formation_global[k][1], formation_global[k][2])
 
             if all(drones_global.formation_reached):
-
               #print("all in formation")
-              for drone in drones_global.drones:
-                #print('before none', drone.start_time)
-                drone.start_time = None
-                drone.pid_x.Kd = 0
-              
               drone_i = 0
               if drones_global.positions[0].y < -62:
                 drones_global.are_ready = True
@@ -754,8 +642,8 @@ def offboard_loop(mode):
       global drones_global
       global changed_sector
       drones_global.setCurrentState()
-      # print(drones_global.cur_state)
-      # print('changed_sec', changed_sector)
+      print(drones_global.cur_state)
+      print('changed_sec', changed_sector)
     except Exception:
       print("Exception in offboard loop")
 

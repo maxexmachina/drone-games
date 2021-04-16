@@ -29,7 +29,7 @@ fi
 
 if [ "$1" == "prof" ]; then
   suf=""
-  args="--names T E C T"
+  args="--names A C P S"
 
   if [ "$world" == "formation_1.world" ]; then
     suf="_1/$num"
