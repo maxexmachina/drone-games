@@ -50,6 +50,7 @@
         </geometry>
       </collision>
       <visual name="visual">
+        <transparency>0.6</transparency>
         <pose>8.5 0 1.1 1.5708 0 1.5708</pose>
         <cast_shadows>true</cast_shadows>
         <geometry>
@@ -61,7 +62,7 @@
     </visual>
     </link>
     
-    <include>
+    <!--<include>
       <uri>model://flight_box</uri>
       <name>flight_box_1</name>
       <pose>41 0 0 0 0 0</pose>
@@ -83,7 +84,7 @@
       <uri>model://regroup_box</uri>
       <name>regroup_box_2</name>
       <pose>0 72 0 0 0 0</pose>
-    </include>
+    </include>-->
     
   </model>
   
