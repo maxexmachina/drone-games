@@ -37,4 +37,5 @@ if [ "$1" == "prof" ]; then
   fi
 
   ./bin/formations_gen.py $model $num formation/borders.txt formation/test_fs${suf}/ $args &
+  ./examples/group.py $num
 fi
