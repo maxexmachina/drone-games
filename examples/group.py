@@ -108,7 +108,7 @@ class Drones:
 
     self.cur_state = States.TRANSITION
     self.cur_direction = [1, 0, 0]
-    self.speed = 12
+    self.speed = 11.5
     self.formation_assumed = [False] * instances_num
     self.formation_reached = [False] * instances_num
     self.ref_point = np.array([0, 0, 0], dtype='float64')
@@ -479,9 +479,9 @@ def mc_example(pt, n, dt):
     # print(drones_global.positions[n-1].x, drones_global.positions[n-1].y, drones_global.positions[n-1].z)
   except Exception:
     pass
-  if dt > 5:
+  if dt > 0:
     arming(n, True)
-  if dt> 5 and dt < 10 and len(drones_global.positions) == instances_num:
+  if dt> 0 and dt < 5 and len(drones_global.positions) == instances_num:
     set_vel(pt, 0, 0, 1)
     #set_pos(pt, 0, n*3 - 90, 5)
     formation_old = [[drones_global.positions[i].x, drones_global.positions[i].y, 2] for i in range(instances_num)]
@@ -491,7 +491,7 @@ def mc_example(pt, n, dt):
     formation_global = change_coor_system(ref_point1)
   # print('fg', formation_global)
 
-  if dt>10 and len(drones_global.positions) == instances_num:
+  if dt>5 and len(drones_global.positions) == instances_num:
     #print(drones_global.cur_state)
     if drones_global.cur_state == States.ROAM:
       # print("roam")
@@ -685,7 +685,7 @@ def mc_example(pt, n, dt):
 
           dist = drones_global.find_distance([drones_global.positions[drone_number].x, drones_global.positions[drone_number ].y, drones_global.positions[drone_number ].z], formation_global[point_number])
 
-          if (dist_from_old > 3 and drone_i < len(drones_global.order) - 1) or dist < 0.5:
+          if (dist_from_old > 2 and drone_i < len(drones_global.order) - 1) or dist < 0.5:
             drone_i += 1
             out_of_form = False
             drones_global.formation_assumed[drone_number] = True
