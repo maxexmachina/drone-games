@@ -125,3 +125,6 @@ git pull
 
 [Список допущенных команд](https://github.com/acsl-mipt/drone-games/blob/main/.resources/Teams.pdf)
 ================================================================
+
+[Список команд, прошедших в финал](https://github.com/acsl-mipt/drone-games/blob/main/.resources/admit_final.pdf)
+================================================================
